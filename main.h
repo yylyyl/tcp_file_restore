@@ -13,46 +13,23 @@
 
 #define int_ntoa(x)	inet_ntoa(*((struct in_addr *)&x))
 
-struct connection {
-	char tmp_name[8];
-	FILE *request_file;
-	FILE *response_file;
-};
-
-struct threads {
-	pthread_t *tid;
-	struct tuple4 addr; // point to point, ip and port.
-	struct connection conn;
-	int inout; //request = 0, response = 1, request close = 2, response close = 3, close all = 4
-	char data[1600];
-	int data_length;
-	//char request_ending[4];
-	//int request_ending_count;
-	//char response_ending[4];
-	//int response_ending_count;
-	pthread_mutex_t mutex;
-	pthread_mutex_t wait_mutex;
-	pthread_cond_t cond;
-	bool consumed;
-	struct threads *next;
-};
-
 struct queue {
 	struct tuple4 addr;
-	int inout; //request = 0, response = 1, request close = 2, response close = 3, close all = 4
-	char data[1600];
+	int inout; //up = 0, down = 1, request close = 2, response close = 3, close all = 4
+	char *data;
 	int data_length;
 	struct queue *next;
 };
 
-extern struct threads *t_head;
 extern struct queue *q_head, *q_tail;
-extern pthread_t ctrl_t;
 extern pthread_mutex_t q_mutex;
-extern pthread_mutex_t t_mutex;
-extern pthread_mutex_t ctrl_mutex;
-extern pthread_cond_t ctrl_cond;
-extern bool ctrl_exit;
-extern bool exiting;
+extern pthread_cond_t q_cond;
+//static bool exiting = false;
 
-void* process_thread(void *arg);
+int tuple4eq(struct tuple4 a, struct tuple4 b);
+void* process_http(void *arg);
+void tcp_callback(struct tcp_stream *a_tcp, void **arg);
+void add_drop(struct tuple4 addr);
+
+int digit2int(char *buf, int start, int end);
+int tec_chunk_size(char *buf);
