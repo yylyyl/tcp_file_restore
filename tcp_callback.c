@@ -4,7 +4,7 @@ struct queue *q_head = NULL, *q_tail = NULL;
 pthread_mutex_t q_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t q_cond = PTHREAD_COND_INITIALIZER;
 
-void process__(struct tcp_stream *a_tcp, int close);
+void add_to_process_queue(struct tcp_stream *a_tcp, int close);
 
 void process_up(struct tcp_stream *a_tcp) {
 	struct half_stream hlf = a_tcp->server;
@@ -28,18 +28,18 @@ void process_up(struct tcp_stream *a_tcp) {
 		}
 	}
 
-	process__(a_tcp, false);
+	add_to_process_queue(a_tcp, false);
 }
 
 void process_down(struct tcp_stream *a_tcp) {
-	process__(a_tcp, false);
+	add_to_process_queue(a_tcp, false);
 }
 
 void process_close(struct tcp_stream *a_tcp) {
-	process__(a_tcp, true);
+	add_to_process_queue(a_tcp, true);
 }
 
-void process__(struct tcp_stream *a_tcp, int close) {
+void add_to_process_queue(struct tcp_stream *a_tcp, int close) {
 	// add to queue tail.
 	//fprintf(stderr, "Process__.\n");
 	pthread_mutex_lock(&q_mutex);

@@ -21,15 +21,38 @@ int tuple4eq(struct tuple4 a, struct tuple4 b) {
 	return 0;
 }
 
+int sockfd;
+
 int main(int argc, char *argv[]) {
 	//signal(SIGINT, signal_handler);
-	/*
-	if(argc!=3)
+	
+	if(argc!=2)
 	{
 		fprintf(stderr,"Usage: http2file <interface>\n");
 		exit(1);
 	}
+
+	fprintf(stderr, "connecting to scanning server...\n");
+
+	int res;
+	struct sockaddr_in server_addr_in;
+	sockfd = socket(AF_INET, SOCK_STREAM, 0);
+	if(sockfd < 0) {
+		perror("cannot create socket");
+		exit(1);
+	}
+	bzero(&server_addr_in, sizeof(server_addr_in) );
+	server_addr_in.sin_family = AF_INET;
+	server_addr_in.sin_port = htons(34433);
+	inet_pton( AF_INET, "127.0.0.1", &server_addr_in.sin_addr );
+	/*res = connect(sockfd, (struct sockaddr *)&server_addr_in, sizeof(server_addr_in));
+	if(res < 0) {
+		perror("cannot connect to server");
+		exit(1);
+	}
+	fprintf(stderr, "connected!\n");
 	*/
+	
 	nids_params.device = argv[1];
 
 	//disable checksum, or nothing we can get.

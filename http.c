@@ -22,6 +22,7 @@ struct conn {
 	int buf_len;
 
 	FILE *fp;
+	int f_count;
 
 	struct conn *next;
 };
@@ -40,6 +41,7 @@ regex_t tec_regex;
 void process_http_(struct conn *c, struct queue *qnode);
 
 void* process_http(void* arg) {
+	fprintf(stderr, "starting http processor...");
 	// init reges
 	int flags = REG_EXTENDED;
 	if(regcomp(&rnrn_regex, "\r\n\r\n", flags)) {
@@ -142,10 +144,19 @@ int response_head_read_cb(char *buf, int len, struct conn *c);
 void move_data(struct conn *c);
 void write_tail_data(struct conn *c);
 int wrap_tec_process(struct conn *c);
+void after_got_file(struct conn *c);
 
 void process_http_(struct conn *c, struct queue *qnode) {
 	if(c == NULL && qnode->inout >= 2)
 		return;
+	if(c != NULL && qnode->inout >= 2 && c->state == 4) {
+		// save all of it
+		if(!c->ignore) {
+			fwrite(c->buf, c->buf_len, 1, c->fp);
+			fprintf(stderr, "wrote %d\n", c->buf_len);
+		}
+		goto finished;
+	}
 	if(c != NULL && qnode->inout >= 2) {
 		shut_it(c);
 		return;
@@ -270,6 +281,7 @@ void process_http_(struct conn *c, struct queue *qnode) {
 				char fn[32] = { 0 };
 				sprintf(fn, "data/%d", count);
 				fprintf(stderr, "file %d\n", count);
+				c->f_count = count;
 				count ++;
 				c->fp = fopen(fn, "w");
 				if(!c->fp) {
@@ -282,20 +294,25 @@ void process_http_(struct conn *c, struct queue *qnode) {
 				c->state = 2;
 				if(!c->ignore) {
 					write_tail_data(c);
-					if(c->wrote == c->content_length) {
-						free(c->response_head);
-						c->response_head = NULL;
-						c->sh_length = 0;
-						goto finished;
-					}
+				}
+				if(c->wrote == c->content_length) {
+					free(c->response_head);
+					c->response_head = NULL;
+					c->sh_length = 0;
+					goto finished;
 				}
 			}
 			if(res == 2) {
 				c->state = 3;
 				move_data(c);
+				free(c->response_head);
+				c->response_head = NULL;
+				c->sh_length = 0;
+				goto tec_p;
 			}
 			if(res == 3) {
 				c->state = 4;
+				write_tail_data(c);
 			}
 
 			free(c->response_head);
@@ -349,6 +366,7 @@ void process_http_(struct conn *c, struct queue *qnode) {
 			memcpy(c->buf + delta, qnode->data, qnode->data_length);
 			c->buf[c->buf_len - 1] = 0;
 			int res;
+tec_p:
 			res = wrap_tec_process(c);
 			if(res < 0) {
 				fprintf(stderr, "cannot process chunked data\n");
@@ -366,6 +384,16 @@ void process_http_(struct conn *c, struct queue *qnode) {
 
 			break;
 		}
+		case 4: {
+			if(qnode->inout != 1) {
+				shut_it(c);
+				break;
+			}
+			if(!c->ignore) {
+				fprintf(stderr, "wrote %d\n", qnode->data_length);
+				fwrite(qnode->data, qnode->data_length, 1, c->fp);
+			}
+		}
 		case 5: {
 finished:
 			if(!c->ignore && c->content_length != -1) {
@@ -373,7 +401,12 @@ finished:
 				c->fp = NULL;
 				fprintf(stderr, "close file\n");
 			}
+			after_got_file(c);
 			// clear c and go back to 0
+			if(qnode->inout >= 2) {
+				shut_it(c);
+				break;
+			}
 			free(c->url);
 			struct tuple4 addr = c->addr;
 			struct conn *n = c->next;
@@ -636,3 +669,41 @@ int wrap_tec_process(struct conn *c) {
 	}
 	return res;
 }
+
+char sip[20];
+char dip[20];
+char sp[10];
+char dp[10];
+
+void address (struct tuple4 addr) {
+	static char buf[256];
+	strcpy (sip, int_ntoa (addr.saddr));
+	sprintf (sp, "%i", addr.source);
+	strcpy (dip, int_ntoa (addr.daddr));
+	sprintf (dp, "%i", addr.dest);
+}
+
+void write_data_file(struct conn *c) {
+	static char fn[32] = { 0 };
+	sprintf(fn, "data/%d.txt", c->f_count);
+	FILE *f = fopen(fn, "w");
+	if (f == NULL)
+	{
+	    perror("Error opening file!");
+	    return;
+	}
+
+	/* print some text */
+	const char *text = "Write this to the file";
+	fprintf(f, "%s,%s,%s,%s,%s", sip, sp, dip, dp, c->url);
+
+	fclose(f);
+}
+
+void after_got_file(struct conn *c) {
+	address(c->addr);
+	printf("=====\nFrom: %s:%s\nTo:   %s:%s\nURL:  %s\nFILE: %d\n=====\n", sip, sp, dip, dp, c->url, c->f_count);
+	//send( sockfd, str, strlen(str)+1, 0 ); 
+	write_data_file(c);
+}
+

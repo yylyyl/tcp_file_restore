@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <pthread.h>
+#include <sys/socket.h>
 #include <signal.h>
 #include "nids.h"
 
@@ -25,6 +26,8 @@ extern struct queue *q_head, *q_tail;
 extern pthread_mutex_t q_mutex;
 extern pthread_cond_t q_cond;
 //static bool exiting = false;
+
+extern int sockfd;
 
 int tuple4eq(struct tuple4 a, struct tuple4 b);
 void* process_http(void *arg);
